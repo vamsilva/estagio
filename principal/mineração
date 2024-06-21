@@ -1,0 +1,104 @@
+import time
+import pandas as pd
+import glob
+
+cbo_familia = ('1236','1425','2122','2124','3171','3172','2123')
+cnae_grupo = ('620','631')
+
+print("###################################\n")
+print("Separação de dados RAIS em 2022\n")
+
+sum_dados = 0
+processar = False
+
+while processar == False:
+    ano = '2022'
+    filtro_setor = input("Realizar filtro por setores de TI (S)/(N): ")
+
+    if ano == '2022':
+        processar = True
+        
+        colunas_manter = ['CBO Ocupação 2002', 'CNAE 2.0 Classe', 'Vínculo Ativo 31/12', 'Escolaridade após 2005','Idade','Município', 'Raça Cor', 'Vl Remun Dezembro Nom', 'Sexo Trabalhador']
+        
+        uf = {'11':'RO','12':'AC','13':'AM','14':'RR','15':'PA','16':'AP','17':'TO','21':'MA',
+                   '22':'PI','23':'CE','24':'RN','25':'PB','26':'PE','27':'AL','28':'SE','29':'BA',
+                '31':'MG','32':'ES','33':'RJ','35':'SP','41':'PR','42':'SC','43':'RS','50':'MS',
+                '51':'MT','52':'GO','53':'DF'}
+    
+
+print("\nProcessando...")
+
+tempo_inicial = time.time()
+
+list_files = glob.glob("C:/Users/victo/2022/texto/*.txt")
+
+for file in list_files:
+    # Leitura do CSV do estado ou região atual:
+    df = pd.read_csv(file, sep = ";", encoding = 'latin-1', dtype = object)
+
+    # Elimina as colunas na lista colunas_remover:
+    #df.drop(colunas_remover, inplace = True, axis = 1)
+
+    # Mantém as colunas na lista colunas_manter:
+    df = df.filter(colunas_manter)
+    
+    # Filtra somente com vínculo ativo 31/12:
+    df = df[df["Vínculo Ativo 31/12"] == '1']
+
+    # Retira a coluna anterior do vínculo, que não é mais necessária:
+    df.drop("Vínculo Ativo 31/12", inplace = True, axis = 1)
+    
+    # Retira salários zerados:
+    df = df[df["Vl Remun Dezembro Nom"] != '0000000000,00']
+    
+    # Transforma as remunerações em flutuante:
+    df['Vl Remun Dezembro Nom'] = df['Vl Remun Dezembro Nom'].str.lstrip('0')       # Tira zero a esquerda
+    df['Vl Remun Dezembro Nom'] = df['Vl Remun Dezembro Nom'].str.replace(',','.')  # Substitui a virgula por ponto
+
+    # Realiza o filtro pelas famílias de CBOs:
+    df = df[df["CBO Ocupação 2002"].str.startswith(cbo_familia)]
+
+    # Realiza o filtro dos setores de TI, caso escolhido a opção:
+    if filtro_setor == 'S':
+        df = df[df["CNAE 2.0 Classe"].str.startswith(cnae_grupo)]
+
+    # Cria a coluna UF e insere o estado atual:
+    df.insert(0, 'UF', df['Município'].apply(lambda x: uf.get(x[:2])))
+
+    # Retira a coluna anterior do município, que não é mais necessária:
+    df.drop("Município", inplace=True, axis=1)
+
+    # Exibe o total de dados separados para o arquivo atual:
+    sum_dados += len(df)
+    print("\nTotal de casos separados: " + str(len(df)) + "\npara o arquivo: " + file)
+
+    # Salva em um novo csv para a regiao atual:
+    df.to_csv("C:/Users/victo/2022/csv" + file[file.find("PUB_")+4:-4] + ".csv", index = False, sep = ';', encoding = 'utf-8')
+
+
+
+    # Realiza a leitura de cada arquivo CSV e junta em um somente:
+
+print("\nSalvando o arquivo final...\n")
+
+list_files = glob.glob("C:/Users/victo/2022/*.csv")
+
+df_final = pd.read_csv(list_files[0], sep = ";", encoding = 'utf-8', dtype = object)
+list_files
+del list_files[0]
+
+for file in list_files:
+    df = pd.read_csv(file, sep = ";", encoding = 'utf-8', dtype = object)
+    
+    df_final = pd.concat([df_final, df], ignore_index = True, sort = False)
+
+if filtro_setor == 'S':
+    df_final.to_csv("C:/Users/victo/2022/estagio/estagio/data/raw/DATA_RAIS_SETORTI_" + ano + ".csv", index = False, sep = ";", encoding='utf-8')
+else:
+    df_final.to_csv("C:/Users/victo/2022/estagio/estagio/data/raw/DATA_RAIS_GERAL_" + ano + ".csv", index = False, sep = ";", encoding='utf-8')
+
+tempo_final= time.time()
+print("\nTotal de itens: " + str(sum_dados))
+print("\n{:.1f} segundos".format(tempo_final - tempo_inicial))
+
+print("\n###################################")
